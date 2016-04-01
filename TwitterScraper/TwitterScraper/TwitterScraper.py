@@ -22,7 +22,6 @@ class TwitterScraper():
         '''
         Constructor
         '''
-        self.driver = webdriver.Firefox()
         self.client = MongoClient(host, port)
         self.db = self.client[db]
         self.collection = self.db[collection]
@@ -47,17 +46,22 @@ class TwitterScraper():
         @rtype int
         """
         
-        #Load the URL in a firefox browser
-        #TODO: user-specified browser
-        driver = webdriver.Firefox()
-        driver.get(url)
-        
-        sleep(3) #let the page load
-        
-        #load all tweets
-        self.scrollToBottom(driver)
-        
-        return self.scrapeTweets(driver)
+        driver = None
+        try:
+            #Load the URL in a firefox browser
+            #TODO: user-specified browser
+            driver = webdriver.Firefox()
+            driver.get(url)
+            
+            sleep(3) #let the page load
+            
+            #load all tweets
+            self.scrollToBottom(driver)
+            
+            return self.scrapeTweets(driver)
+        finally:
+            if driver:
+                driver.quit()
     
     def scrapeQuery(self, queryStr, startDate=None, endDate=None, maxCount=10000):
         """
@@ -95,9 +99,8 @@ class TwitterScraper():
             #TODO: this will cause errors if maxCount is None
             #TODO: if there's no startDate AND no maxCount this will look forever
             
-            #Scrape tweets for the specified day
-            dayCount = self.scrapeQueryByDateRange(queryStr, searchDateStart, searchDateEnd, count, maxCount)
-            count += dayCount #update count
+            #Scrape tweets for the specified day and update the count
+            count = self.scrapeQueryByDateRange(queryStr, searchDateStart, searchDateEnd, count, maxCount)
             #move the search window back one day
             searchDateEnd = searchDateStart
             searchDateStart = searchDateStart - oneDay
@@ -135,13 +138,28 @@ class TwitterScraper():
         return self.scrapePage(url, startDate, endDate, count, maxCount)
     
     def findTweets(self, driver):
+        """
+        Method for finding all tweets on the page specified by driver
+        
+        @param driver: webdriver of the page to be searched for tweets
+        @type driver: selenium.webdriver
+        
+        @return list of drivers pointing to all tweets on the specified page
+        @rtype [selenium.webdriver]
+        """
         return driver.find_elements_by_class_name(CLASS_JS_STREAM_ITEM)
     
     def scrapeTweet(self,tweetDriver):
         tweet = {}
         tweet[TWEET_TEXT] = tweetDriver.find_element_by_class_name(CLASS_JS_TWEET_TEXT).text
         tweet[TWEET_DATE] = datetime.datetime.strptime(tweetDriver.find_element_by_class_name(CLASS_TWEET_TIMESTAMP).get_attribute(ATTR_TITLE), TWITTER_DATE_FORMAT)
-        tweet[TWEET_ID] = tweetDriver.get_attribute[ATTR_ITEM_ID]
+        
+        originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
+        tweet[TWEET_ID] = originalTweet.get_attribute(ATTR_ITEM_ID)
+        tweet[TWEET_USER_ID] = originalTweet.get_attribute(ATTR_USER_ID)
+        tweet[TWEET_SCREEN_NAME] = originalTweet.get_attribute(ATTR_SCREEN_NAME)
+        tweet[TWEET_NAME] = originalTweet.get_attribute(ATTR_NAME)
+        tweet[TWEET_MENTIONS] = originalTweet.get_attribute(ATTR_MENTIONS)
         
         return tweet
 
@@ -163,24 +181,31 @@ class TwitterScraper():
         @return the number of tweets inserted into the database
         @rtype int
         """
-        #TODO: Insert into DB
-        #TODO: Return count
 
         tweetDrivers = self.findTweets(driver)
         
-        for tweetDriver in tweetDrivers:
+        for tweetDriver in tweetDrivers:            
+            #TODO: more nuanced handling of special tweets
+            if (self.isLink(tweetDriver) or self.isMultimedia(tweetDriver) or self.isPeriscope(tweetDriver)
+                or self.isRetweet(tweetDriver) or self.isReply(tweetDriver) or self.isQuote(tweetDriver)):
+                #These tweets are not self contained. Easiest to just filter them out
+                continue
+            
             tweet = self.scrapeTweet(tweetDriver)
             
+            #TODO: search API is in UTC. Scraped timestamp is local time
             if ((startDate and (tweet[TWEET_DATE] < startDate)) #If the tweet is before the start date
                 or (endDate and (tweet[TWEET_DATE] >= endDate))):#or if the tweet is after the endDate
                 continue #don't process this tweet. Move to the next tweet
             
             #place the tweet in the DB
-            tweets.append(tweet)
+            self.collection.insert_one(tweet)
             count +=1 #update count
             
             if (maxTweets and (count > maxTweets)): #if we've hit the maximum tweet number
                 break #don't process this tweet. Exit the loop
+        
+        return count
 
     def scrollToBottom(self, driver):
         """
@@ -196,7 +221,7 @@ class TwitterScraper():
             
             #check for error
             tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
-            if tryAgain.is_visible():
+            if tryAgain.is_displayed():
                 #TODO: Should we deal with cases where TryAgain is deactivated between checking visibility and clicking it?
                 #The try again button is visible
                 tryAgain.click() #click it
@@ -220,12 +245,113 @@ class TwitterScraper():
                 except NoSuchElementException:
                     #Still can't find "Has More Items". Probably legitimate
                     break #exit the loop
-                
+        
+    def isQuote(self,tweetDriver):
+        """
+        Method for determining if a tweet contains a quoted tweet
+        
+        @param tweetDriver: webdriver for the tweet to be checked
+        @type tweetDriver: selenium.webdriver
+        
+        @return boolean representing whether the tweet contains a quoted tweet
+        @rtype bool
+        """
+        try:
+            tweetDriver.find_element_by_class_name(CLASS_QUOTE_TWEET)
+            #Quote container found
+            return True
+        except NoSuchElementException:
+            #No quote container found
+            return False
+    
+    def isLink(self,tweetDriver):
+        """
+        Method for determining if a tweet contains a URL
+        
+        @param tweetDriver: webdriver for the tweet to be checked
+        @type tweetDriver: selenium.webdriver
+        
+        @return boolean representing whether the tweet contains a URL
+        @rtype bool
+        """
+        try:
+            tweetDriver.find_element_by_class_name(CLASS_TIMELINE_LINK)
+            #link found
+            return True
+        except NoSuchElementException:
+            #No link found
+            return False
+    
+    def isRetweet(self,tweetDriver):
+        """
+        Method for determining if a tweet is a retweet
+        
+        @param tweetDriver: webdriver for the tweet to be checked
+        @type tweetDriver: selenium.webdriver
+        
+        @return boolean representing whether the tweet is a retweet
+        @rtype bool
+        """
+        originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
+        retweeterID = originalTweet.get_attribute(ATTR_RETWEETER)
+        #if such attribute exists, tweet is a retweet
+        return retweeterID != None
+    
+    def isReply(self,tweetDriver):
+        """
+        Method for determining if a tweet is a reply
+        
+        @param tweetDriver: webdriver for the tweet to be checked
+        @type tweetDriver: selenium.webdriver
+        
+        @return boolean representing whether the tweet is a reply
+        @rtype bool
+        """
+        originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
+        reply = originalTweet.get_attribute(ATTR_IS_REPLY_TO)
+        #if such attribute exists, tweet is a reply
+        return reply != None
+    
+    def isMultimedia(self,tweetDriver):
+        """
+        Method for determining if a tweet contains a photo or video
+        
+        @param tweetDriver: webdriver for the tweet to be checked
+        @type tweetDriver: selenium.webdriver
+        
+        @return boolean representing whether the tweet contains a photo or video
+        @rtype bool
+        """
+        try:
+            tweetDriver.find_element_by_class_name(CLASS_ADAPTIVE_MEDIA)
+            #Quote container found
+            return True
+        except NoSuchElementException:
+            #No quote container found
+            return False
+    
+    def isPeriscope(self,tweetDriver):
+        """
+        Method for determining if a tweet contains a periscope video
+        
+        @param tweetDriver: webdriver for the tweet to be checked
+        @type tweetDriver: selenium.webdriver
+        
+        @return boolean representing whether the tweet contains a periscope video
+        @rtype bool
+        """
+        try:
+            tweetDriver.find_element_by_class_name(CLASS_MEDIA_CONTAINER)
+            #Quote container found
+            return True
+        except NoSuchElementException:
+            #No quote container found
+            return False
+    
 if __name__ == "__main__":
-    print "test"
-    scraper = TwitterScraper(collection="Understatement")
+    scraper = TwitterScraper(collection="test")
     
     today = datetime.datetime.today()
     
-    scraper.scrapeByDay("#understatement", today)
+    print scraper.scrapeQuery("#sarcasm")
     

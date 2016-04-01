@@ -17,6 +17,7 @@ CLASS_JS_ORIGINAL_TWEET = "js-original-tweet"
 CLASS_QUOTE_TWEET = "QuoteTweet-innerContainer"
 CLASS_ADAPTIVE_MEDIA = "AdaptiveMedia"
 CLASS_MEDIA_CONTAINER = "js-media-container"
+CLASS_TIMELINE_LINK = "twitter-timeline-link"
 ATTR_ITEM_ID = 'data-item-id'
 ATTR_TITLE = "title"
 ATTR_SCREEN_NAME = "data-screen-name"

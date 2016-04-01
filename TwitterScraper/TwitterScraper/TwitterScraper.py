@@ -58,10 +58,11 @@ class TwitterScraper():
             #load all tweets
             self.scrollToBottom(driver)
             
-            return self.scrapeTweets(driver)
+            return self.scrapeTweets(driver, startDate, endDate, count, maxCount)
         finally:
             if driver:
                 driver.quit()
+                sleep(1) #TODO: to avoid threading issues, maybe?
     
     def scrapeQuery(self, queryStr, startDate=None, endDate=None, maxCount=10000):
         """
@@ -135,6 +136,9 @@ class TwitterScraper():
         queryStr = "q={}%20since:{}%20until:{}".format(quote_plus(queryStr), sinceStr, untilStr)
         url = "&".join([TWITTER_SEARCH, queryStr])
         
+        #TODO: remove
+        print "Scraping Tweets for {}".format(sinceStr)
+        
         return self.scrapePage(url, startDate, endDate, count, maxCount)
     
     def findTweets(self, driver):
@@ -147,23 +151,30 @@ class TwitterScraper():
         @return list of drivers pointing to all tweets on the specified page
         @rtype [selenium.webdriver]
         """
-        return driver.find_elements_by_class_name(CLASS_JS_STREAM_ITEM)
+        #TODO: Is there any disadvantage to just finding original tweet container? It would simplify other functions
+#         return driver.find_elements_by_class_name(CLASS_JS_STREAM_ITEM)
+        return driver.find_elements_by_class_name(CLASS_JS_ORIGINAL_TWEET)
     
     def scrapeTweet(self,tweetDriver):
         tweet = {}
         tweet[TWEET_TEXT] = tweetDriver.find_element_by_class_name(CLASS_JS_TWEET_TEXT).text
         tweet[TWEET_DATE] = datetime.datetime.strptime(tweetDriver.find_element_by_class_name(CLASS_TWEET_TIMESTAMP).get_attribute(ATTR_TITLE), TWITTER_DATE_FORMAT)
         
-        originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
-        tweet[TWEET_ID] = originalTweet.get_attribute(ATTR_ITEM_ID)
-        tweet[TWEET_USER_ID] = originalTweet.get_attribute(ATTR_USER_ID)
-        tweet[TWEET_SCREEN_NAME] = originalTweet.get_attribute(ATTR_SCREEN_NAME)
-        tweet[TWEET_NAME] = originalTweet.get_attribute(ATTR_NAME)
-        tweet[TWEET_MENTIONS] = originalTweet.get_attribute(ATTR_MENTIONS)
+#         originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
+#         tweet[TWEET_ID] = originalTweet.get_attribute(ATTR_ITEM_ID)
+#         tweet[TWEET_USER_ID] = originalTweet.get_attribute(ATTR_USER_ID)
+#         tweet[TWEET_SCREEN_NAME] = originalTweet.get_attribute(ATTR_SCREEN_NAME)
+#         tweet[TWEET_NAME] = originalTweet.get_attribute(ATTR_NAME)
+#         tweet[TWEET_MENTIONS] = originalTweet.get_attribute(ATTR_MENTIONS)
+        tweet[TWEET_ID] = tweetDriver.get_attribute(ATTR_ITEM_ID)
+        tweet[TWEET_USER_ID] = tweetDriver.get_attribute(ATTR_USER_ID)
+        tweet[TWEET_SCREEN_NAME] = tweetDriver.get_attribute(ATTR_SCREEN_NAME)
+        tweet[TWEET_NAME] = tweetDriver.get_attribute(ATTR_NAME)
+        tweet[TWEET_MENTIONS] = tweetDriver.get_attribute(ATTR_MENTIONS)
         
         return tweet
 
-    def scrapeTweets(self, driver, startDate=None, endDate=None, count=0, maxTweets=None):
+    def scrapeTweets(self, driver, startDate=None, endDate=None, count=0, maxCount=None):
         """
         Method for scraping tweets from HTML
         
@@ -202,8 +213,11 @@ class TwitterScraper():
             self.collection.insert_one(tweet)
             count +=1 #update count
             
-            if (maxTweets and (count > maxTweets)): #if we've hit the maximum tweet number
+            if (maxCount and (count > maxCount)): #if we've hit the maximum tweet number
                 break #don't process this tweet. Exit the loop
+        
+        #TODO: remove
+        print "{} tweets scraped".format(count)
         
         return count
 
@@ -292,8 +306,9 @@ class TwitterScraper():
         @return boolean representing whether the tweet is a retweet
         @rtype bool
         """
-        originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
-        retweeterID = originalTweet.get_attribute(ATTR_RETWEETER)
+#         originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
+#         retweeterID = originalTweet.get_attribute(ATTR_RETWEETER)
+        retweeterID = tweetDriver.get_attribute(ATTR_RETWEETER)
         #if such attribute exists, tweet is a retweet
         return retweeterID != None
     
@@ -307,8 +322,9 @@ class TwitterScraper():
         @return boolean representing whether the tweet is a reply
         @rtype bool
         """
-        originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
-        reply = originalTweet.get_attribute(ATTR_IS_REPLY_TO)
+#         originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
+#         reply = originalTweet.get_attribute(ATTR_IS_REPLY_TO)
+        reply = tweetDriver.get_attribute(ATTR_IS_REPLY_TO)
         #if such attribute exists, tweet is a reply
         return reply != None
     
@@ -349,9 +365,7 @@ class TwitterScraper():
             return False
     
 if __name__ == "__main__":
-    scraper = TwitterScraper(collection="test")
-    
-    today = datetime.datetime.today()
+    scraper = TwitterScraper(collection="sarcasm")
     
     print scraper.scrapeQuery("#sarcasm")
     

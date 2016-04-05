@@ -64,7 +64,7 @@ class TwitterScraper():
                 driver.quit()
                 sleep(1) #TODO: to avoid threading issues, maybe?
     
-    def scrapeQuery(self, queryStr, startDate=None, endDate=None, maxCount=10000):
+    def scrapeQuery(self, queryStr, startDate=None, endDate=None, maxCount=10000, lang="en", rangeDays=5):
         """
         Method for scraping all tweets that match a specific query, optionally within a specific date range
         
@@ -76,19 +76,23 @@ class TwitterScraper():
         @type endDate: datetime.datetime
         @param maxCount: the maximum number of tweets we wish to scrape
         @type maxCount: int
+        @param lang: Used to filter by tweet language
+        @type lang: str
+        @param rangeDays: The number of days of tweets to load at one time. Used for tuning loading efficiency.
+        @type rangeDays: int
         
         @return the number of tweets inserted into the database
         @rtype int
         """
         
         #Scraping tweets in one day increments is more robust and avoids slowdowns when loading large numbers of tweets
-        oneDay = datetime.timedelta(days=1)
+        rangeDelta = datetime.timedelta(days=rangeDays)
         searchDateEnd = endDate
         if searchDateEnd == None:
             #No end date specified
             #Set endDate to tomorrow's date (since endDate is exclusive)
-            searchDateEnd = datetime.datetime.today() + oneDay
-        searchDateStart = searchDateEnd - oneDay
+            searchDateEnd = datetime.datetime.today() + datetime.timedelta(days=1)
+        searchDateStart = searchDateEnd - rangeDelta
         
         count = 0 #this will count the number of tweets we've submitted to the database. Start at 0
         
@@ -104,14 +108,14 @@ class TwitterScraper():
             count = self.scrapeQueryByDateRange(queryStr, searchDateStart, searchDateEnd, count, maxCount)
             #move the search window back one day
             searchDateEnd = searchDateStart
-            searchDateStart = searchDateStart - oneDay
+            searchDateStart = searchDateStart - rangeDelta
         
         return count
         
         
         
     
-    def scrapeQueryByDateRange(self, queryStr, startDate, endDate, count=0, maxCount=10000):
+    def scrapeQueryByDateRange(self, queryStr, startDate, endDate, count=0, maxCount=10000, lang="en"):
         """
         Method for scraping all tweets on a specific day
         
@@ -125,21 +129,30 @@ class TwitterScraper():
         @type count: int
         @param maxCount: the maximum nuber of tweets we wish to scrape. Used for recursively querying one day at a time
         @type maxCount: int
+        @param lang: Used to filter by tweet language
+        @type lang: str
         
         @return the number of tweets inserted into the database
         @rtype int
         """
         
+        #TODO: start and endDate are UTC, scraped timestamp is local time
+        
         #Twitter web search requires a gap of at least 1 day
         sinceStr = startDate.strftime("%Y-%m-%d")
         untilStr = endDate.strftime("%Y-%m-%d")
+        #TODO: maybe do a list implementation so you only call join once?
         queryStr = "q={}%20since:{}%20until:{}".format(quote_plus(queryStr), sinceStr, untilStr)
+        if lang:
+            queryStr = "%20".join([queryStr, "lang%3A{}".format(lang)])
         url = "&".join([TWITTER_SEARCH, queryStr])
         
         #TODO: remove
         print "Scraping Tweets for {}".format(sinceStr)
         
-        return self.scrapePage(url, startDate, endDate, count, maxCount)
+        #TODO: readd date ranges to scrapepage once we decide how ot deal with the UTC vs local time issue
+#         return self.scrapePage(url, startDate, endDate, count, maxCount)
+        return self.scrapePage(url, count=count, maxCount=maxCount)
     
     def findTweets(self, driver):
         """
@@ -151,21 +164,12 @@ class TwitterScraper():
         @return list of drivers pointing to all tweets on the specified page
         @rtype [selenium.webdriver]
         """
-        #TODO: Is there any disadvantage to just finding original tweet container? It would simplify other functions
-#         return driver.find_elements_by_class_name(CLASS_JS_STREAM_ITEM)
         return driver.find_elements_by_class_name(CLASS_JS_ORIGINAL_TWEET)
     
     def scrapeTweet(self,tweetDriver):
         tweet = {}
         tweet[TWEET_TEXT] = tweetDriver.find_element_by_class_name(CLASS_JS_TWEET_TEXT).text
         tweet[TWEET_DATE] = datetime.datetime.strptime(tweetDriver.find_element_by_class_name(CLASS_TWEET_TIMESTAMP).get_attribute(ATTR_TITLE), TWITTER_DATE_FORMAT)
-        
-#         originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
-#         tweet[TWEET_ID] = originalTweet.get_attribute(ATTR_ITEM_ID)
-#         tweet[TWEET_USER_ID] = originalTweet.get_attribute(ATTR_USER_ID)
-#         tweet[TWEET_SCREEN_NAME] = originalTweet.get_attribute(ATTR_SCREEN_NAME)
-#         tweet[TWEET_NAME] = originalTweet.get_attribute(ATTR_NAME)
-#         tweet[TWEET_MENTIONS] = originalTweet.get_attribute(ATTR_MENTIONS)
         tweet[TWEET_ID] = tweetDriver.get_attribute(ATTR_ITEM_ID)
         tweet[TWEET_USER_ID] = tweetDriver.get_attribute(ATTR_USER_ID)
         tweet[TWEET_SCREEN_NAME] = tweetDriver.get_attribute(ATTR_SCREEN_NAME)
@@ -248,7 +252,7 @@ class TwitterScraper():
                 #"Has More Items" not found
                 #This may mean we've loaded all tweets or it could be a mistake
                 #spam "scroll down"
-                for x in xrange(10):
+                for x in xrange(5):
                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     sleep(0.5)
                    
@@ -306,8 +310,6 @@ class TwitterScraper():
         @return boolean representing whether the tweet is a retweet
         @rtype bool
         """
-#         originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
-#         retweeterID = originalTweet.get_attribute(ATTR_RETWEETER)
         retweeterID = tweetDriver.get_attribute(ATTR_RETWEETER)
         #if such attribute exists, tweet is a retweet
         return retweeterID != None
@@ -322,8 +324,6 @@ class TwitterScraper():
         @return boolean representing whether the tweet is a reply
         @rtype bool
         """
-#         originalTweet = tweetDriver.find_element_by_class_name(CLASS_JS_ORIGINAL_TWEET)
-#         reply = originalTweet.get_attribute(ATTR_IS_REPLY_TO)
         reply = tweetDriver.get_attribute(ATTR_IS_REPLY_TO)
         #if such attribute exists, tweet is a reply
         return reply != None
@@ -367,5 +367,5 @@ class TwitterScraper():
 if __name__ == "__main__":
     scraper = TwitterScraper(collection="sarcasm")
     
-    print scraper.scrapeQuery("#sarcasm")
+    print scraper.scrapeQuery("#sarcasm", rangeDays=1)
     

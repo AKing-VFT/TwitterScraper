@@ -4,7 +4,7 @@ Created on Mar 31, 2016
 @author: Andrew
 '''
 
-from TwitterConstants import *
+from TwitterWebScraper.TwitterConstants import *
 from pymongo.mongo_client import MongoClient
 from selenium import webdriver
 from urllib import quote_plus
@@ -12,10 +12,13 @@ from time import sleep
 import datetime
 from selenium.common.exceptions import NoSuchElementException
 
+TWITTER_LAUNCH_DATE = datetime.date(06, 03, 20)
+    
 class TwitterScraper():
     '''
     Class for scraping Tweets off of Twitter website
     '''
+    
 
 
     def __init__(self, host="localhost", port=27017, db=TWEET_DB, collection=TWEET_COLLECTION):
@@ -34,9 +37,9 @@ class TwitterScraper():
         @param url: the URL to be scraped
         @type url: str
         @param startDate: Beginning of the date range, UTC. Value is inclusive
-        @type startDate: datetime.datetime
+        @type startDate: datetime.date
         @param endDate: End of date range, UTC. Value is exclusive
-        @type endDate: datetime.datetime
+        @type endDate: datetime.date
         @param count: the number of tweets already scraped. Used for querying one day at a time
         @type count: int
         @param maxCount: the maximum number of tweets we wish to scrape
@@ -51,6 +54,7 @@ class TwitterScraper():
             #Load the URL in a firefox browser
             #TODO: user-specified browser
             driver = webdriver.Firefox()
+#             driver = webdriver.Chrome()
             driver.get(url)
             
             sleep(3) #let the page load
@@ -71,9 +75,9 @@ class TwitterScraper():
         @param queryStr: the string to be queried for
         @type queryStr: str
         @param startDate: Beginning of the date range, UTC. Value is inclusive
-        @type startDate: datetime.datetime
+        @type startDate: datetime.date
         @param endDate: End of date range, UTC. Value is exclusive
-        @type endDate: datetime.datetime
+        @type endDate: datetime.date
         @param maxCount: the maximum number of tweets we wish to scrape
         @type maxCount: int
         @param lang: Used to filter by tweet language
@@ -91,18 +95,18 @@ class TwitterScraper():
         if searchDateEnd == None:
             #No end date specified
             #Set endDate to tomorrow's date (since endDate is exclusive)
-            searchDateEnd = datetime.datetime.today() + datetime.timedelta(days=1)
+            searchDateEnd = datetime.date.today() + datetime.timedelta(days=1)
         searchDateStart = searchDateEnd - rangeDelta
+        
+        if startDate == None:
+            #if user doesn't specify a startDate, set it to the launch of twitter to avoid infinite loops
+            startDate = TWITTER_LAUNCH_DATE
         
         count = 0 #this will count the number of tweets we've submitted to the database. Start at 0
         
-        while(((startDate == None) or (startDate and (startDate <= searchDateStart)))
-              and (count <= maxCount)):
+        while((startDate <= searchDateStart) and ((maxCount == None) or count < maxCount)):
             #If there's a startDate, we don't want to search before it
             #We also don't want to keep searching if we've hit max count
-            
-            #TODO: this will cause errors if maxCount is None
-            #TODO: if there's no startDate AND no maxCount this will look forever
             
             #Scrape tweets for the specified day and update the count
             count = self.scrapeQueryByDateRange(queryStr, searchDateStart, searchDateEnd, count, maxCount)
@@ -238,12 +242,16 @@ class TwitterScraper():
             sleep(1) #let tweets load
             
             #check for error
-            tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
-            if tryAgain.is_displayed():
-                #TODO: Should we deal with cases where TryAgain is deactivated between checking visibility and clicking it?
-                #The try again button is visible
-                tryAgain.click() #click it
-                sleep(5) #let page load
+            try:
+                tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
+                if tryAgain.is_displayed():
+                    #TODO: Should we deal with cases where TryAgain is deactivated between checking visibility and clicking it?
+                    #The try again button is visible
+                    tryAgain.click() #click it
+                    sleep(5) #let page load
+            except NoSuchElementException:
+                #for some reason "Try again" hasn't loaded.
+                sleep (3)    
             
             #check to see if there are more tweets to load
             try:
@@ -365,7 +373,19 @@ class TwitterScraper():
             return False
     
 if __name__ == "__main__":
-    scraper = TwitterScraper(collection="sarcasm")
+    scraper = TwitterScraper(collection="understatement")
     
-    print scraper.scrapeQuery("#sarcasm", rangeDays=1)
+    minDates = []
+    minDates.append(scraper.db.sarcasm.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
+    minDates.append(scraper.db.hyperbole.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
+    minDates.append(scraper.db.understatement.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
+    minDate = min(minDates)
+    
+    maxDate = scraper.collection.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE]
+    oneDay = datetime.timedelta(days=1)
+    startDate = minDate
+    endDate = maxDate+oneDay
+
+    
+    print scraper.scrapeQuery("#understatement", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None)
     

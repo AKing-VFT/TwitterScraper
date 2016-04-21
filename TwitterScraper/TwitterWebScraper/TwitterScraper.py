@@ -8,11 +8,11 @@ from TwitterWebScraper.TwitterConstants import *
 from pymongo.mongo_client import MongoClient
 from selenium import webdriver
 from urllib import quote_plus
-from time import sleep
+from time import sleep, time
 import datetime
 from selenium.common.exceptions import NoSuchElementException
 
-TWITTER_LAUNCH_DATE = datetime.date(06, 03, 20)
+TWITTER_LAUNCH_DATE = datetime.date(2006, 03, 20)
     
 class TwitterScraper():
     '''
@@ -30,7 +30,7 @@ class TwitterScraper():
         self.collection = self.db[collection]
     
     
-    def scrapePage(self, url, startDate=None, endDate=None, count=0, maxCount=10000):
+    def scrapePage(self, url, startDate=None, endDate=None, count=0, maxCount=10000, timeout=None):
         """
         Method for scraping all tweets from the page specified by url
         
@@ -44,6 +44,8 @@ class TwitterScraper():
         @type count: int
         @param maxCount: the maximum number of tweets we wish to scrape
         @type maxCount: int
+        @param timeout: the number of seconds until scrolling should timeout. None means no timeout
+        @type timeout: int
         
         @return the number of tweets inserted into the database
         @rtype int
@@ -54,13 +56,13 @@ class TwitterScraper():
             #Load the URL in a firefox browser
             #TODO: user-specified browser
             driver = webdriver.Firefox()
-#             driver = webdriver.Chrome()
+#             driver = webdriver.Chrome("/home/andrew/chromedriver")
             driver.get(url)
             
             sleep(3) #let the page load
             
             #load all tweets
-            self.scrollToBottom(driver)
+            self.scrollToBottom(driver, timeout)
             
             return self.scrapeTweets(driver, startDate, endDate, count, maxCount)
         finally:
@@ -68,7 +70,7 @@ class TwitterScraper():
                 driver.quit()
                 sleep(1) #TODO: to avoid threading issues, maybe?
     
-    def scrapeQuery(self, queryStr, startDate=None, endDate=None, maxCount=10000, lang="en", rangeDays=5):
+    def scrapeQuery(self, queryStr, startDate=None, endDate=None, maxCount=10000, lang="en", rangeDays=5, timeout=None):
         """
         Method for scraping all tweets that match a specific query, optionally within a specific date range
         
@@ -84,6 +86,8 @@ class TwitterScraper():
         @type lang: str
         @param rangeDays: The number of days of tweets to load at one time. Used for tuning loading efficiency.
         @type rangeDays: int
+        @param timeout: the number of seconds until scrolling should timeout. None means no timeout
+        @type timeout: int
         
         @return the number of tweets inserted into the database
         @rtype int
@@ -109,7 +113,7 @@ class TwitterScraper():
             #We also don't want to keep searching if we've hit max count
             
             #Scrape tweets for the specified day and update the count
-            count = self.scrapeQueryByDateRange(queryStr, searchDateStart, searchDateEnd, count, maxCount)
+            count = self.scrapeQueryByDateRange(queryStr, searchDateStart, searchDateEnd, count, maxCount, lang, timeout)
             #move the search window back one day
             searchDateEnd = searchDateStart
             searchDateStart = searchDateStart - rangeDelta
@@ -119,7 +123,7 @@ class TwitterScraper():
         
         
     
-    def scrapeQueryByDateRange(self, queryStr, startDate, endDate, count=0, maxCount=10000, lang="en"):
+    def scrapeQueryByDateRange(self, queryStr, startDate, endDate, count=0, maxCount=10000, lang="en", timeout=None):
         """
         Method for scraping all tweets on a specific day
         
@@ -135,6 +139,8 @@ class TwitterScraper():
         @type maxCount: int
         @param lang: Used to filter by tweet language
         @type lang: str
+        @param timeout: the number of seconds until scrolling should timeout. None means no timeout
+        @type timeout: int
         
         @return the number of tweets inserted into the database
         @rtype int
@@ -156,7 +162,7 @@ class TwitterScraper():
         
         #TODO: readd date ranges to scrapepage once we decide how ot deal with the UTC vs local time issue
 #         return self.scrapePage(url, startDate, endDate, count, maxCount)
-        return self.scrapePage(url, count=count, maxCount=maxCount)
+        return self.scrapePage(url, count=count, maxCount=maxCount, timeout=timeout)
     
     def findTweets(self, driver):
         """
@@ -229,13 +235,19 @@ class TwitterScraper():
         
         return count
 
-    def scrollToBottom(self, driver):
+    def scrollToBottom(self, driver, timeout=None):
         """
         Method for scrolling webpage to bottom to load all tweets. Note that this method can take a very long time if there are a lot of query results
         
         @param driver: A driver for the webpage to be scrolled
         @type driver: selenium.webdriver
+        @param timeout: the number of seconds until scrolling should timeout. None means no timeout
+        @type timeout: int
         """
+        
+        if timeout:
+            startTime = time()
+        
         while True:
             #Scroll down to load more tweets
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -271,6 +283,11 @@ class TwitterScraper():
                 except NoSuchElementException:
                     #Still can't find "Has More Items". Probably legitimate
                     break #exit the loop
+            
+            if timeout:
+                if ((time() - startTime) > timeout):
+                    #we've exceeded the timeout
+                    break
         
     def isQuote(self,tweetDriver):
         """
@@ -373,7 +390,7 @@ class TwitterScraper():
             return False
     
 if __name__ == "__main__":
-    scraper = TwitterScraper(collection="understatement")
+    scraper = TwitterScraper(collection="sarcasm")
     
     minDates = []
     minDates.append(scraper.db.sarcasm.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
@@ -387,5 +404,5 @@ if __name__ == "__main__":
     endDate = maxDate+oneDay
 
     
-    print scraper.scrapeQuery("#understatement", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None)
+    print scraper.scrapeQuery("#sarcasm", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None)
     

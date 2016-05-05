@@ -12,7 +12,7 @@ from time import sleep, time
 import datetime
 from selenium.common.exceptions import NoSuchElementException
 
-TWITTER_LAUNCH_DATE = datetime.date(2006, 03, 20)
+TWITTER_LAUNCH_DATE = datetime.datetime(2006, 03, 20)
     
 class TwitterScraper():
     '''
@@ -55,8 +55,8 @@ class TwitterScraper():
         try:
             #Load the URL in a firefox browser
             #TODO: user-specified browser
-            driver = webdriver.Firefox()
-#             driver = webdriver.Chrome("/home/andrew/chromedriver")
+#             driver = webdriver.Firefox()
+            driver = webdriver.Chrome("/home/andrew/chromedriver")
             driver.get(url)
             
             sleep(3) #let the page load
@@ -99,7 +99,7 @@ class TwitterScraper():
         if searchDateEnd == None:
             #No end date specified
             #Set endDate to tomorrow's date (since endDate is exclusive)
-            searchDateEnd = datetime.date.today() + datetime.timedelta(days=1)
+            searchDateEnd = datetime.datetime.today() + datetime.timedelta(days=1)
         searchDateStart = searchDateEnd - rangeDelta
         
         if startDate == None:
@@ -185,6 +185,8 @@ class TwitterScraper():
         tweet[TWEET_SCREEN_NAME] = tweetDriver.get_attribute(ATTR_SCREEN_NAME)
         tweet[TWEET_NAME] = tweetDriver.get_attribute(ATTR_NAME)
         tweet[TWEET_MENTIONS] = tweetDriver.get_attribute(ATTR_MENTIONS)
+        tweet[TWEET_RETWEET_COUNT] = self.getCountAndConvertToInt(tweetDriver.find_element_by_class_name(CLASS_RETWEET))
+        tweet[TWEET_FAVORITE_COUNT] = self.getCountAndConvertToInt(tweetDriver.find_element_by_class_name(CLASS_FAVORITE))
         
         return tweet
 
@@ -389,20 +391,40 @@ class TwitterScraper():
             #No quote container found
             return False
     
+    def getCountAndConvertToInt(self, driver):
+        """
+        Method for getting the retweet/favorite count contained in driver and converts it from text to int
+        
+        @param driver: webdriver for the tweet to be checked. Should be either class js-actionRetweet or js-actionFavorite
+        @type driver: selenium.webdriver
+        
+        @return The count as an integer
+        @rtype int
+        """
+        countStr = driver.find_element_by_class_name(CLASS_COUNT).text
+        
+        if not countStr: #if the string is empty
+            countStr = "0"
+        
+        return int(countStr)
+    
 if __name__ == "__main__":
     scraper = TwitterScraper(collection="sarcasm")
     
-    minDates = []
-    minDates.append(scraper.db.sarcasm.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
-    minDates.append(scraper.db.hyperbole.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
-    minDates.append(scraper.db.understatement.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
-    minDate = min(minDates)
-    
+#     minDates = []
+#     minDates.append(scraper.db.sarcasm.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
+#     minDates.append(scraper.db.hyperbole.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
+#     minDates.append(scraper.db.understatement.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
+#     minDate = min(minDates)
+     
     maxDate = scraper.collection.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE]
+#     minDate = scraper.collection.find_one(sort=[(TWEET_DATE, DESCENDING)])[TWEET_DATE]
     oneDay = datetime.timedelta(days=1)
-    startDate = minDate
+#     startDate = minDate
+    startDate = None
     endDate = maxDate+oneDay
+#     endDate = None
 
     
-    print scraper.scrapeQuery("#sarcasm", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None)
+    print scraper.scrapeQuery("#sarcasm", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None, timeout=None)
     

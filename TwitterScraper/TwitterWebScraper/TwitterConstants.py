@@ -8,7 +8,6 @@ Created on Mar 1, 2016
 Constants for Scraping Twitter.com
 '''
 TWITTER_SEARCH = "http://twitter.com/search?f=tweets&vertical=default&src=typd"
-CLASS_JS_STREAM_ITEM = "js-stream-item"
 CLASS_HAS_MORE_ITEMS = "has-more-items"
 CLASS_JS_TWEET_TEXT = "js-tweet-text"
 CLASS_TWEET_TIMESTAMP = "tweet-timestamp"
@@ -18,6 +17,9 @@ CLASS_QUOTE_TWEET = "QuoteTweet-innerContainer"
 CLASS_ADAPTIVE_MEDIA = "AdaptiveMedia"
 CLASS_MEDIA_CONTAINER = "js-media-container"
 CLASS_TIMELINE_LINK = "twitter-timeline-link"
+CLASS_RETWEET = "js-actionRetweet"
+CLASS_FAVORITE = "js-actionFavorite"
+CLASS_COUNT = "ProfileTweet-actionCountForPresentation"
 ATTR_ITEM_ID = 'data-item-id'
 ATTR_TITLE = "title"
 ATTR_SCREEN_NAME = "data-screen-name"
@@ -40,3 +42,5 @@ TWEET_NAME = "name"
 TWEET_SCREEN_NAME = "username"
 TWEET_USER_ID = "user id"
 TWEET_MENTIONS = "mentions"
+TWEET_FAVORITE_COUNT = "favorites"
+TWEET_RETWEET_COUNT = "retweets"

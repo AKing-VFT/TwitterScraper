@@ -11,8 +11,11 @@ from urllib import quote_plus
 from time import sleep, time
 import datetime
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common import action_chains
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 
-TWITTER_LAUNCH_DATE = datetime.datetime(2006, 03, 20)
+TWITTER_LAUNCH_DATE = datetime.datetime(2006, 3, 20)
     
 class TwitterScraper():
     '''
@@ -56,13 +59,14 @@ class TwitterScraper():
             #Load the URL in a firefox browser
             #TODO: user-specified browser
 #             driver = webdriver.Firefox()
-            driver = webdriver.Chrome("/home/andrew/chromedriver")
+            driver = webdriver.Chrome("C:/chromedriver.exe")
             driver.get(url)
             
             sleep(3) #let the page load
             
             #load all tweets
             self.scrollToBottom(driver, timeout)
+            print "scrolling finished"
             
             return self.scrapeTweets(driver, startDate, endDate, count, maxCount)
         finally:
@@ -250,42 +254,67 @@ class TwitterScraper():
         if timeout:
             startTime = time()
         
+        ac = ActionChains(driver)
+        ac = ac.send_keys(Keys.PAGE_DOWN)
+        
+        scrollPosition = 0 #hold the Y value of the scroll bar
         while True:
-            #Scroll down to load more tweets
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            sleep(1) #let tweets load
+            ac.perform() #press PageDown
+            sleep(1) #wait for page to load
             
-            #check for error
-            try:
-                tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
-                if tryAgain.is_displayed():
-                    #TODO: Should we deal with cases where TryAgain is deactivated between checking visibility and clicking it?
-                    #The try again button is visible
-                    tryAgain.click() #click it
-                    sleep(5) #let page load
-            except NoSuchElementException:
-                #for some reason "Try again" hasn't loaded.
-                sleep (3)    
+            newScrollPosition = driver.execute_script("return window.scrollY;");
             
-            #check to see if there are more tweets to load
-            try:
-                driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
-            except NoSuchElementException:
-                #"Has More Items" not found
-                #This may mean we've loaded all tweets or it could be a mistake
-                #spam "scroll down"
-                for x in xrange(5):
-                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                    sleep(0.5)
-                   
-                sleep(5) #let page finish loading
-                #check again 
+            if newScrollPosition == scrollPosition: #If there was no change in scroll bar position
+                #If the scroll bar didn't move it might mean we've loaded all the tweets or it could mean something went wrong
+                            
+                #check for error message
                 try:
-                    driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
+                    tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
+                    if tryAgain.is_displayed():
+                        #TODO: Should we deal with cases where TryAgain is deactivated between checking visibility and clicking it?
+                        #The try again button is visible
+                        tryAgain.click() #click it
+                        sleep(5) #let page load
                 except NoSuchElementException:
-                    #Still can't find "Has More Items". Probably legitimate
+                    #for some reason "Try again" hasn't loaded.
+                    sleep (3)
+                    
+                #Try scrolling down more to see if it loads more tweets
+                for _ in xrange(5): #press PageDown 5 more times
+                    ac.perform() #press PageDown
+                    sleep(1) #wait for page to load
+                
+                #update srroll position
+                newScrollPosition = driver.execute_script("return window.scrollY;");
+                
+                if scrollPosition == newScrollPosition:
+                    #If the scroll position still has't changed then we're probably at the end of the page
                     break #exit the loop
+                  
+#             #TODO: Remove old page end verification
+#             #check to see if there are more tweets to load
+#             try:
+#                 driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
+#             except NoSuchElementException:
+#                 #"Has More Items" not found
+#                 #This may mean we've loaded all tweets or it could be a mistake
+#                 #spam "scroll down"
+#                 for x in xrange(5):
+#                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+#                     sleep(0.5)
+#                    
+#                 sleep(5) #let page finish loading
+#                 #check again 
+#                 try:
+#                     driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
+#                 except NoSuchElementException:
+#                     #Still can't find "Has More Items". Probably legitimate
+#                     break #exit the loop
+
+            #update the value of scrollPosition
+            scrollPosition = newScrollPosition
             
+            #check for timeout
             if timeout:
                 if ((time() - startTime) > timeout):
                     #we've exceeded the timeout
@@ -409,7 +438,7 @@ class TwitterScraper():
         return int(countStr)
     
 if __name__ == "__main__":
-    scraper = TwitterScraper(collection="sarcasm")
+    scraper = TwitterScraper(collection="OlympicSongs")
     
 #     minDates = []
 #     minDates.append(scraper.db.sarcasm.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
@@ -417,14 +446,15 @@ if __name__ == "__main__":
 #     minDates.append(scraper.db.understatement.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE])
 #     minDate = min(minDates)
      
-    maxDate = scraper.collection.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE]
+#     maxDate = scraper.collection.find_one(sort=[(TWEET_DATE, 1)])[TWEET_DATE]
 #     minDate = scraper.collection.find_one(sort=[(TWEET_DATE, DESCENDING)])[TWEET_DATE]
-    oneDay = datetime.timedelta(days=1)
+#     oneDay = datetime.timedelta(days=1)
 #     startDate = minDate
-    startDate = None
-    endDate = maxDate+oneDay
+#     startDate = None
+#     endDate = maxDate+oneDay
 #     endDate = None
-
+    startDate = datetime.datetime(2016, 8, 9)
+    endDate = datetime.datetime(2016, 8, 10)
     
-    print scraper.scrapeQuery("#sarcasm", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None, timeout=None)
+    print scraper.scrapeQuery("#blah", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None, timeout=None)
     

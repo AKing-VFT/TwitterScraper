@@ -11,7 +11,6 @@ from urllib import quote_plus
 from time import sleep, time
 import datetime
 from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common import action_chains
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 
@@ -189,8 +188,8 @@ class TwitterScraper():
         tweet[TWEET_SCREEN_NAME] = tweetDriver.get_attribute(ATTR_SCREEN_NAME)
         tweet[TWEET_NAME] = tweetDriver.get_attribute(ATTR_NAME)
         tweet[TWEET_MENTIONS] = tweetDriver.get_attribute(ATTR_MENTIONS)
-        tweet[TWEET_RETWEET_COUNT] = self.getCountAndConvertToInt(tweetDriver.find_element_by_class_name(CLASS_RETWEET))
-        tweet[TWEET_FAVORITE_COUNT] = self.getCountAndConvertToInt(tweetDriver.find_element_by_class_name(CLASS_FAVORITE))
+        tweet[TWEET_RETWEET_COUNT] = self.getActionCount(tweetDriver.find_element_by_class_name(CLASS_RETWEET))
+        tweet[TWEET_FAVORITE_COUNT] = self.getActionCount(tweetDriver.find_element_by_class_name(CLASS_FAVORITE))
         
         return tweet
 
@@ -212,10 +211,8 @@ class TwitterScraper():
         @return the number of tweets inserted into the database
         @rtype int
         """
-
-        tweetDrivers = self.findTweets(driver)
         
-        for tweetDriver in tweetDrivers:            
+        for tweetDriver in self.findTweets(driver):            
             #TODO: more nuanced handling of special tweets
             if (self.isLink(tweetDriver) or self.isMultimedia(tweetDriver) or self.isPeriscope(tweetDriver)
                 or self.isRetweet(tweetDriver) or self.isReply(tweetDriver) or self.isQuote(tweetDriver)):
@@ -261,12 +258,19 @@ class TwitterScraper():
         while True:
             ac.perform() #press PageDown
             sleep(1) #wait for page to load
-            
+             
             newScrollPosition = driver.execute_script("return window.scrollY;");
-            
+             
             if newScrollPosition == scrollPosition: #If there was no change in scroll bar position
                 #If the scroll bar didn't move it might mean we've loaded all the tweets or it could mean something went wrong
-                            
+                
+                sleep(3) #give extra time to load
+                
+                #Try scrolling down more to see if it loads more tweets
+                for _ in xrange(5): #press PageDown 5 more times
+                    ac.perform() #press PageDown
+                    sleep(1) #wait for page to load
+                    
                 #check for error message
                 try:
                     tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
@@ -277,20 +281,18 @@ class TwitterScraper():
                         sleep(5) #let page load
                 except NoSuchElementException:
                     #for some reason "Try again" hasn't loaded.
-                    sleep (3)
-                    
-                #Try scrolling down more to see if it loads more tweets
-                for _ in xrange(5): #press PageDown 5 more times
-                    ac.perform() #press PageDown
-                    sleep(1) #wait for page to load
+                    pass
                 
+                #one last hail mary scroll
+                ac.perform()
+                 
                 #update srroll position
                 newScrollPosition = driver.execute_script("return window.scrollY;");
-                
+                 
                 if scrollPosition == newScrollPosition:
                     #If the scroll position still has't changed then we're probably at the end of the page
                     break #exit the loop
-                  
+                   
 #             #TODO: Remove old page end verification
 #             #check to see if there are more tweets to load
 #             try:
@@ -302,7 +304,7 @@ class TwitterScraper():
 #                 for x in xrange(5):
 #                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 #                     sleep(0.5)
-#                    
+#                     
 #                 sleep(5) #let page finish loading
 #                 #check again 
 #                 try:
@@ -310,7 +312,7 @@ class TwitterScraper():
 #                 except NoSuchElementException:
 #                     #Still can't find "Has More Items". Probably legitimate
 #                     break #exit the loop
-
+ 
             #update the value of scrollPosition
             scrollPosition = newScrollPosition
             
@@ -420,17 +422,17 @@ class TwitterScraper():
             #No quote container found
             return False
     
-    def getCountAndConvertToInt(self, driver):
+    def getActionCount(self, driver):
         """
-        Method for getting the retweet/favorite count contained in driver and converts it from text to int
+        Method for getting the retweet/favorite count contained in driver
         
-        @param driver: webdriver for the tweet to be checked. Should be either class js-actionRetweet or js-actionFavorite
+        @param driver: webdriver to be checked. Should be either CLASS_RETWEET or CLASS_FAVORITE
         @type driver: selenium.webdriver
         
         @return The count as an integer
         @rtype int
         """
-        countStr = driver.find_element_by_class_name(CLASS_COUNT).text
+        countStr = driver.find_element_by_class_name(CLASS_ACTION_COUNT).get_attribute(ATTR_STAT_COUNT)
         
         if not countStr: #if the string is empty
             countStr = "0"
@@ -456,5 +458,5 @@ if __name__ == "__main__":
     startDate = datetime.datetime(2016, 8, 9)
     endDate = datetime.datetime(2016, 8, 10)
     
-    print scraper.scrapeQuery("#blah", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None, timeout=None)
+    print scraper.scrapeQuery("#olympicsongs", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None, timeout=None)
     

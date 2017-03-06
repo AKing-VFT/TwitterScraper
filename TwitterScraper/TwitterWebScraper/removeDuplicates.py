@@ -7,7 +7,7 @@ from pymongo.mongo_client import MongoClient
 
 client = MongoClient()
 db = client.tweets
-collection = db.understatement
+collection = db.OlympicSongs
 
 #https://stackoverflow.com/questions/34722866/pymongo-remove-duplicates-map-reduce
 cursor = collection.aggregate(

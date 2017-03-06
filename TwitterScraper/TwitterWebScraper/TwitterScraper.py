@@ -259,62 +259,62 @@ class TwitterScraper():
             ac.perform() #press PageDown
             sleep(1) #wait for page to load
              
-            newScrollPosition = driver.execute_script("return window.scrollY;");
-             
-            if newScrollPosition == scrollPosition: #If there was no change in scroll bar position
-                #If the scroll bar didn't move it might mean we've loaded all the tweets or it could mean something went wrong
-                
-                sleep(3) #give extra time to load
-                
-                #Try scrolling down more to see if it loads more tweets
-                for _ in xrange(5): #press PageDown 5 more times
-                    ac.perform() #press PageDown
-                    sleep(1) #wait for page to load
-                    
-                #check for error message
-                try:
-                    tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
-                    if tryAgain.is_displayed():
-                        #TODO: Should we deal with cases where TryAgain is deactivated between checking visibility and clicking it?
-                        #The try again button is visible
-                        tryAgain.click() #click it
-                        sleep(5) #let page load
-                except NoSuchElementException:
-                    #for some reason "Try again" hasn't loaded.
-                    pass
-                
-                #one last hail mary scroll
-                ac.perform()
-                 
-                #update srroll position
-                newScrollPosition = driver.execute_script("return window.scrollY;");
-                 
-                if scrollPosition == newScrollPosition:
-                    #If the scroll position still has't changed then we're probably at the end of the page
-                    break #exit the loop
-                   
-#             #TODO: Remove old page end verification
-#             #check to see if there are more tweets to load
-#             try:
-#                 driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
-#             except NoSuchElementException:
-#                 #"Has More Items" not found
-#                 #This may mean we've loaded all tweets or it could be a mistake
-#                 #spam "scroll down"
-#                 for x in xrange(5):
-#                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-#                     sleep(0.5)
+#             newScrollPosition = driver.execute_script("return window.scrollY;");
+#              
+#             if newScrollPosition == scrollPosition: #If there was no change in scroll bar position
+#                 #If the scroll bar didn't move it might mean we've loaded all the tweets or it could mean something went wrong
+#                 
+#                 sleep(3) #give extra time to load
+#                 
+#                 #Try scrolling down more to see if it loads more tweets
+#                 for _ in xrange(5): #press PageDown 5 more times
+#                     ac.perform() #press PageDown
+#                     sleep(1) #wait for page to load
 #                     
-#                 sleep(5) #let page finish loading
-#                 #check again 
+#                 #check for error message
 #                 try:
-#                     driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
+#                     tryAgain = driver.find_element_by_class_name(CLASS_TRY_AGAIN)
+#                     if tryAgain.is_displayed():
+#                         #TODO: Should we deal with cases where TryAgain is deactivated between checking visibility and clicking it?
+#                         #The try again button is visible
+#                         tryAgain.click() #click it
+#                         sleep(5) #let page load
 #                 except NoSuchElementException:
-#                     #Still can't find "Has More Items". Probably legitimate
+#                     #for some reason "Try again" hasn't loaded.
+#                     pass
+#                 
+#                 #one last hail mary scroll
+#                 ac.perform()
+#                  
+#                 #update srroll position
+#                 newScrollPosition = driver.execute_script("return window.scrollY;");
+#                  
+#                 if scrollPosition == newScrollPosition:
+#                     #If the scroll position still has't changed then we're probably at the end of the page
 #                     break #exit the loop
- 
-            #update the value of scrollPosition
-            scrollPosition = newScrollPosition
+#                    
+# #             #TODO: Remove old page end verification
+# #             #check to see if there are more tweets to load
+# #             try:
+# #                 driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
+# #             except NoSuchElementException:
+# #                 #"Has More Items" not found
+# #                 #This may mean we've loaded all tweets or it could be a mistake
+# #                 #spam "scroll down"
+# #                 for x in xrange(5):
+# #                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+# #                     sleep(0.5)
+# #                     
+# #                 sleep(5) #let page finish loading
+# #                 #check again 
+# #                 try:
+# #                     driver.find_element_by_class_name(CLASS_HAS_MORE_ITEMS)
+# #                 except NoSuchElementException:
+# #                     #Still can't find "Has More Items". Probably legitimate
+# #                     break #exit the loop
+#  
+#             #update the value of scrollPosition
+#             scrollPosition = newScrollPosition
             
             #check for timeout
             if timeout:
@@ -458,5 +458,5 @@ if __name__ == "__main__":
     startDate = datetime.datetime(2016, 8, 9)
     endDate = datetime.datetime(2016, 8, 10)
     
-    print scraper.scrapeQuery("#olympicsongs", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None, timeout=None)
+    print scraper.scrapeQuery("#olympicsongs", startDate=startDate, endDate=endDate, rangeDays=1, maxCount=None, timeout=14400)
     
